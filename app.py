@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+import anthropic
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -790,6 +791,159 @@ def tab_insights(df: pd.DataFrame) -> None:
         st.dataframe(churn_display, use_container_width=True, hide_index=True)
 
 
+# ── 탭 5 : AI 챗봇 ────────────────────────────────────────────────────────────
+def _build_data_context(df: pd.DataFrame) -> str:
+    """현재 필터된 데이터를 Claude에게 전달할 텍스트 요약으로 변환."""
+    seg_summary = (
+        df.groupby("segment")
+        .agg(
+            고객수=("customer_id", "count"),
+            평균나이=("age", "mean"),
+            평균월소득=("income", "mean"),
+            평균월지출=("monthly_spending", "mean"),
+            평균저축률=("savings_rate", "mean"),
+            평균신용점수=("credit_score", "mean"),
+            평균거래횟수=("transaction_count", "mean"),
+            평균여신=("여신잔액_만원", "mean"),
+            평균수신=("수신잔액_만원", "mean"),
+            평균카드=("카드실적_만원", "mean"),
+        )
+        .round(1)
+        .reset_index()
+    )
+
+    bank_summary = (
+        df.groupby("주거래은행")
+        .agg(
+            고객수=("customer_id", "count"),
+            평균여신=("여신잔액_만원", "mean"),
+            평균수신=("수신잔액_만원", "mean"),
+            평균카드=("카드실적_만원", "mean"),
+            평균펀드=("펀드잔액_만원", "mean"),
+        )
+        .round(1)
+        .reset_index()
+    )
+
+    churn_df = df.copy()
+    churn_df["이탈위험점수"] = (
+        (churn_df["days_since_last_transaction"] > 30).astype(int) * 30
+        + (churn_df["credit_score"] < 650).astype(int) * 25
+        + (churn_df["segment"] == "비활성").astype(int) * 30
+        + (churn_df["transaction_count"] < 5).astype(int) * 15
+    )
+    churn_high_cnt = (churn_df["이탈위험점수"] >= 55).sum()
+
+    lines = [
+        f"[현재 필터된 고객 데이터 요약]",
+        f"- 총 고객 수: {len(df)}명",
+        f"- 평균 나이: {df['age'].mean():.1f}세",
+        f"- 평균 월소득: {df['income'].mean() / 10_000:.0f}만원",
+        f"- 평균 월지출: {df['monthly_spending'].mean() / 10_000:.0f}만원",
+        f"- 평균 저축률: {df['savings_rate'].mean():.1%}",
+        f"- 평균 신용점수: {df['credit_score'].mean():.0f}점",
+        f"- 이탈 고위험 고객: {churn_high_cnt}명 (전체의 {churn_high_cnt / len(df) * 100:.1f}%)",
+        "",
+        "[세그먼트별 요약]",
+    ]
+    for _, row in seg_summary.iterrows():
+        lines.append(
+            f"  {row['segment']}: {int(row['고객수'])}명 | "
+            f"평균소득 {row['평균월소득'] / 10_000:.0f}만원 | "
+            f"평균지출 {row['평균월지출'] / 10_000:.0f}만원 | "
+            f"저축률 {row['평균저축률']:.1%} | "
+            f"신용점수 {row['평균신용점수']:.0f} | "
+            f"여신 {row['평균여신']:.0f}만원 | "
+            f"수신 {row['평균수신']:.0f}만원 | "
+            f"카드실적 {row['평균카드']:.0f}만원"
+        )
+    lines.append("")
+    lines.append("[주거래은행별 요약]")
+    for _, row in bank_summary.iterrows():
+        lines.append(
+            f"  {row['주거래은행']}: {int(row['고객수'])}명 | "
+            f"여신 {row['평균여신']:.0f}만원 | "
+            f"수신 {row['평균수신']:.0f}만원 | "
+            f"카드실적 {row['평균카드']:.0f}만원 | "
+            f"펀드 {row['평균펀드']:.0f}만원"
+        )
+    return "\n".join(lines)
+
+
+def tab_chatbot(df: pd.DataFrame) -> None:
+    st.subheader("💬 AI 챗봇 — 마이데이터 분석 어시스턴트")
+    st.caption("현재 필터된 고객 데이터를 바탕으로 Claude AI가 질문에 답변합니다.")
+
+    # 세션 초기화
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history: list[dict] = []
+
+    # 예시 질문 버튼
+    col_q1, col_q2, col_q3 = st.columns(3)
+    preset_question = None
+    if col_q1.button("👑 VIP 고객 특징 분석해줘", use_container_width=True):
+        preset_question = "VIP 고객 특징 분석해줘"
+    if col_q2.button("🚨 이탈 위험 고객 알려줘", use_container_width=True):
+        preset_question = "이탈 위험 고객 알려줘"
+    if col_q3.button("🏦 은행별 실적 비교해줘", use_container_width=True):
+        preset_question = "은행별 실적 비교해줘"
+
+    st.markdown("---")
+
+    # 대화 히스토리 출력
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # 입력 처리 (예시 버튼 또는 직접 입력)
+    user_input = st.chat_input("질문을 입력하세요...")
+    question = preset_question or user_input
+
+    if question:
+        st.session_state.chat_history.append({"role": "user", "content": question})
+        with st.chat_message("user"):
+            st.markdown(question)
+
+        data_context = _build_data_context(df)
+        system_prompt = (
+            "당신은 마이데이터 금융 분석 전문가입니다. "
+            "아래 고객 데이터 요약을 참고하여 사용자의 질문에 한국어로 명확하고 구체적으로 답변하세요. "
+            "수치를 근거로 인사이트를 제공하고, 실용적인 제언을 포함하세요.\n\n"
+            + data_context
+        )
+
+        messages_for_api = [
+            {"role": m["role"], "content": m["content"]}
+            for m in st.session_state.chat_history
+        ]
+
+        with st.chat_message("assistant"):
+            with st.spinner("분석 중..."):
+                try:
+                    client = anthropic.Anthropic(
+                        api_key=st.secrets["ANTHROPIC_API_KEY"]
+                    )
+                    response = client.messages.create(
+                        model="claude-opus-4-6",
+                        max_tokens=1024,
+                        system=system_prompt,
+                        messages=messages_for_api,
+                    )
+                    answer = response.content[0].text
+                except Exception as e:
+                    answer = f"오류가 발생했습니다: {e}"
+
+            st.markdown(answer)
+
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+    # 대화 초기화 버튼
+    if st.session_state.chat_history:
+        if st.button("🗑️ 대화 초기화", type="secondary"):
+            st.session_state.chat_history = []
+            st.rerun()
+
+
 # ── 메인 ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     df_full = load_data()
@@ -803,8 +957,8 @@ def main() -> None:
         st.warning("선택된 조건에 해당하는 고객이 없습니다. 필터를 조정해주세요.")
         return
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["📊 전체 개요", "🔍 세그먼트 분석", "👤 고객 상세", "🤖 AI 인사이트"]
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["📊 전체 개요", "🔍 세그먼트 분석", "👤 고객 상세", "🤖 AI 인사이트", "💬 AI 챗봇"]
     )
 
     with tab1:
@@ -815,6 +969,8 @@ def main() -> None:
         tab_detail(filtered)
     with tab4:
         tab_insights(filtered)
+    with tab5:
+        tab_chatbot(filtered)
 
 
 if __name__ == "__main__":
