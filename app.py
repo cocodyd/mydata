@@ -56,7 +56,10 @@ DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "dummy_data.csv")
 # ── 데이터 로드 ────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data() -> pd.DataFrame:
-    return pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH, encoding="utf-8-sig")
+    # BOM이나 공백으로 인해 컬럼명이 깨진 경우 정규화
+    df.columns = df.columns.str.strip().str.lstrip("\ufeff")
+    return df
 
 
 def format_won(amount: float) -> str:
@@ -93,6 +96,12 @@ def build_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     gender = st.sidebar.multiselect("성별", ["M", "F"], default=["M", "F"])
+
+    if "주거래은행" not in df.columns:
+        st.sidebar.error(
+            f"'주거래은행' 컬럼을 찾을 수 없습니다. 현재 컬럼: {list(df.columns)}"
+        )
+        return df
 
     filtered = df[
         df["segment"].isin(segments)

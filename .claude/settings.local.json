@@ -10,7 +10,18 @@
       "Bash(python -c \"import pandas as pd; df = pd.read_csv\\(''data/dummy_data.csv''\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.shape\\); print\\(df[''주거래은행''].value_counts\\(\\)\\)\")",
       "Bash(python.exe -c \"import pandas as pd; df = pd.read_csv\\(''data/dummy_data.csv''\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.shape\\)\")",
       "Bash(python.exe -c \":*)",
-      "Bash(python.exe -m py_compile app.py)"
+      "Bash(python.exe -m py_compile app.py)",
+      "Bash(python:*)",
+      "Bash(py --version)",
+      "Bash(python3 -c \"print\\(''hello''\\)\")",
+      "Read(//c/Users/cocod/AppData/Local/Programs/**)",
+      "Bash(ls /c/Python*)",
+      "Read(//c/Users/cocod/miniconda3/**)",
+      "Read(//c/Users/cocod/**)",
+      "Bash(/c/Users/cocod/anaconda3/python.exe -c \"\nimport pandas as pd\ndf = pd.read_csv\\('C:/Users/cocod/OneDrive/바탕 화면/CODEX_TEST/data/dummy_data.csv', encoding='utf-8'\\)\ndf.to_csv\\('C:/Users/cocod/OneDrive/바탕 화면/CODEX_TEST/data/dummy_data.csv', index=False, encoding='utf-8-sig'\\)\nprint\\('columns:', list\\(df.columns\\)\\)\nprint\\('saved as utf-8-sig \\(UTF-8-BOM\\)'\\)\n\")",
+      "Bash(/c/Users/cocod/anaconda3/python.exe -c \"\nimport chardet\nwith open\\('C:/Users/cocod/OneDrive/바탕 화면/CODEX_TEST/data/dummy_data.csv', 'rb'\\) as f:\n    raw = f.read\\(\\)\nprint\\(chardet.detect\\(raw\\)\\)\nprint\\('BOM bytes:', raw[:3].hex\\(\\)\\)\n\")",
+      "Bash(/c/Users/cocod/anaconda3/python.exe -c \"\nimport pandas as pd\ndf = pd.read_csv\\('C:/Users/cocod/OneDrive/바탕 화면/CODEX_TEST/data/dummy_data.csv', encoding='utf-8-sig'\\)\nprint\\('columns:', list\\(df.columns\\)\\)\nprint\\('rows:', len\\(df\\)\\)\n\")",
+      "Bash(/c/Users/cocod/anaconda3/python.exe -c \"\nwith open\\('C:/Users/cocod/OneDrive/바탕 화면/CODEX_TEST/data/dummy_data.csv', 'rb'\\) as f:\n    raw = f.read\\(200\\)\nprint\\(raw\\)\n\")"
     ]
   }
 }
