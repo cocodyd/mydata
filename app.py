@@ -40,6 +40,16 @@ SEGMENT_EMOJI: dict[str, str] = {
     "비활성": "😴",
 }
 
+BANK_COLORS: dict[str, str] = {
+    "KB국민": "#FFB300",
+    "신한": "#0052A4",
+    "하나": "#00843D",
+    "우리": "#1B4F8B",
+    "NH농협": "#70B244",
+}
+
+BANKS = ["KB국민", "신한", "하나", "우리", "NH농협"]
+
 DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "dummy_data.csv")
 
 
@@ -67,6 +77,12 @@ def build_sidebar(df: pd.DataFrame) -> pd.DataFrame:
         default=["VIP", "일반", "절약형", "비활성"],
     )
 
+    banks = st.sidebar.multiselect(
+        "주거래은행",
+        options=BANKS,
+        default=BANKS,
+    )
+
     age_min, age_max = int(df["age"].min()), int(df["age"].max())
     age_range = st.sidebar.slider("나이 범위", age_min, age_max, (age_min, age_max))
 
@@ -80,6 +96,7 @@ def build_sidebar(df: pd.DataFrame) -> pd.DataFrame:
 
     filtered = df[
         df["segment"].isin(segments)
+        & df["주거래은행"].isin(banks)
         & df["age"].between(age_range[0], age_range[1])
         & df["income"].between(income_range[0] * 10_000, income_range[1] * 10_000)
         & df["gender"].isin(gender)
@@ -150,6 +167,71 @@ def tab_overview(df: pd.DataFrame) -> None:
             margin=dict(t=50, b=20),
         )
         st.plotly_chart(fig2, use_container_width=True)
+
+    # 주거래은행별 고객 분포
+    st.markdown("---")
+    st.subheader("🏦 주거래은행별 고객 분포")
+
+    col_bank1, col_bank2 = st.columns(2)
+
+    with col_bank1:
+        bank_cnt = df["주거래은행"].value_counts().reset_index()
+        bank_cnt.columns = ["은행", "고객수"]
+        fig_bank = px.bar(
+            bank_cnt,
+            x="은행",
+            y="고객수",
+            color="은행",
+            color_discrete_map=BANK_COLORS,
+            title="주거래은행별 고객 수",
+            text="고객수",
+        )
+        fig_bank.update_traces(textposition="outside")
+        fig_bank.update_layout(margin=dict(t=50, b=20), showlegend=False)
+        st.plotly_chart(fig_bank, use_container_width=True)
+
+    with col_bank2:
+        bank_seg = (
+            df.groupby(["주거래은행", "segment"])
+            .size()
+            .reset_index(name="고객수")
+        )
+        fig_bs = px.bar(
+            bank_seg,
+            x="주거래은행",
+            y="고객수",
+            color="segment",
+            color_discrete_map=SEGMENT_COLORS,
+            title="주거래은행별 세그먼트 구성",
+            barmode="stack",
+            category_orders={"주거래은행": BANKS},
+        )
+        fig_bs.update_layout(margin=dict(t=50, b=20))
+        st.plotly_chart(fig_bs, use_container_width=True)
+
+    # 은행별 평균 자산 현황
+    bank_asset = (
+        df.groupby("주거래은행")
+        .agg(
+            평균여신=("여신잔액_만원", "mean"),
+            평균수신=("수신잔액_만원", "mean"),
+            평균펀드=("펀드잔액_만원", "mean"),
+        )
+        .reset_index()
+    )
+    fig_asset = go.Figure()
+    for col_name, color in [("평균여신", "#EF5350"), ("평균수신", "#42A5F5"), ("평균펀드", "#66BB6A")]:
+        fig_asset.add_trace(
+            go.Bar(name=col_name, x=bank_asset["주거래은행"], y=bank_asset[col_name])
+        )
+    fig_asset.update_layout(
+        title="주거래은행별 평균 여신·수신·펀드 잔액 (만원)",
+        barmode="group",
+        xaxis_title="은행",
+        yaxis_title="금액 (만원)",
+        margin=dict(t=50, b=20),
+    )
+    st.plotly_chart(fig_asset, use_container_width=True)
 
     # 요약 테이블
     st.subheader("세그먼트별 주요 지표 요약")
@@ -239,6 +321,93 @@ def tab_segment(df: pd.DataFrame) -> None:
         )
         st.plotly_chart(fig, use_container_width=True)
 
+    # 은행별 여신·수신·카드 실적 비교
+    st.markdown("---")
+    st.subheader("🏦 은행별 여신 / 수신 / 카드 실적 비교")
+
+    bank_seg_agg = (
+        df.groupby(["주거래은행", "segment"])
+        .agg(
+            평균여신=("여신잔액_만원", "mean"),
+            평균수신=("수신잔액_만원", "mean"),
+            평균카드=("카드실적_만원", "mean"),
+            평균외환=("외환거래_달러", "mean"),
+            평균펀드=("펀드잔액_만원", "mean"),
+            고객수=("customer_id", "count"),
+        )
+        .reset_index()
+    )
+
+    metric_tab1, metric_tab2, metric_tab3 = st.tabs(["여신잔액", "수신잔액", "카드실적"])
+
+    with metric_tab1:
+        fig_loan = px.bar(
+            bank_seg_agg,
+            x="주거래은행",
+            y="평균여신",
+            color="segment",
+            color_discrete_map=SEGMENT_COLORS,
+            barmode="group",
+            title="은행별 세그먼트별 평균 여신잔액 (만원)",
+            labels={"평균여신": "평균 여신잔액 (만원)", "주거래은행": "은행"},
+            category_orders={"주거래은행": BANKS},
+        )
+        st.plotly_chart(fig_loan, use_container_width=True)
+
+    with metric_tab2:
+        fig_dep = px.bar(
+            bank_seg_agg,
+            x="주거래은행",
+            y="평균수신",
+            color="segment",
+            color_discrete_map=SEGMENT_COLORS,
+            barmode="group",
+            title="은행별 세그먼트별 평균 수신잔액 (만원)",
+            labels={"평균수신": "평균 수신잔액 (만원)", "주거래은행": "은행"},
+            category_orders={"주거래은행": BANKS},
+        )
+        st.plotly_chart(fig_dep, use_container_width=True)
+
+    with metric_tab3:
+        fig_card = px.bar(
+            bank_seg_agg,
+            x="주거래은행",
+            y="평균카드",
+            color="segment",
+            color_discrete_map=SEGMENT_COLORS,
+            barmode="group",
+            title="은행별 세그먼트별 평균 카드실적 (만원)",
+            labels={"평균카드": "평균 카드실적 (만원)", "주거래은행": "은행"},
+            category_orders={"주거래은행": BANKS},
+        )
+        st.plotly_chart(fig_card, use_container_width=True)
+
+    # 은행별 종합 실적 버블 차트
+    bank_total = (
+        df.groupby("주거래은행")
+        .agg(
+            평균여신=("여신잔액_만원", "mean"),
+            평균수신=("수신잔액_만원", "mean"),
+            평균카드=("카드실적_만원", "mean"),
+            고객수=("customer_id", "count"),
+        )
+        .reset_index()
+    )
+    fig_bubble = px.scatter(
+        bank_total,
+        x="평균여신",
+        y="평균수신",
+        size="고객수",
+        color="주거래은행",
+        color_discrete_map=BANK_COLORS,
+        text="주거래은행",
+        title="은행별 여신 vs 수신 잔액 비교 (버블 크기=고객수)",
+        labels={"평균여신": "평균 여신잔액 (만원)", "평균수신": "평균 수신잔액 (만원)"},
+        size_max=60,
+    )
+    fig_bubble.update_traces(textposition="top center")
+    st.plotly_chart(fig_bubble, use_container_width=True)
+
     # 레이더 차트
     st.subheader("세그먼트 특성 비교 (레이더 차트)")
     seg_avg = (
@@ -286,19 +455,51 @@ def tab_segment(df: pd.DataFrame) -> None:
 def tab_detail(df: pd.DataFrame) -> None:
     st.subheader("고객 상세 데이터")
 
-    credit_min = st.slider("최소 신용점수 필터", 500, 1000, 500)
-    detail = df[df["credit_score"] >= credit_min].copy()
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        credit_min = st.slider("최소 신용점수 필터", 500, 1000, 500)
+    with col_f2:
+        bank_filter = st.multiselect(
+            "주거래은행 필터",
+            options=BANKS,
+            default=BANKS,
+        )
+
+    detail = df[
+        (df["credit_score"] >= credit_min) & (df["주거래은행"].isin(bank_filter))
+    ].copy()
 
     disp = detail.copy()
     disp["income"] = disp["income"].apply(format_won)
     disp["monthly_spending"] = disp["monthly_spending"].apply(format_won)
     disp["loan_balance"] = disp["loan_balance"].apply(format_won)
     disp["savings_rate"] = disp["savings_rate"].apply(lambda x: f"{x:.1%}")
-    disp.columns = [
-        "고객ID", "나이", "성별", "월소득", "월지출",
-        "거래횟수", "마지막거래(일전)", "저축률", "대출잔액",
-        "신용점수", "보유계좌수", "세그먼트",
-    ]
+    disp["여신잔액_만원"] = disp["여신잔액_만원"].apply(lambda x: f"{x:,.0f}만원")
+    disp["수신잔액_만원"] = disp["수신잔액_만원"].apply(lambda x: f"{x:,.0f}만원")
+    disp["카드실적_만원"] = disp["카드실적_만원"].apply(lambda x: f"{x:,.0f}만원")
+    disp["외환거래_달러"] = disp["외환거래_달러"].apply(lambda x: f"${x:,.0f}")
+    disp["펀드잔액_만원"] = disp["펀드잔액_만원"].apply(lambda x: f"{x:,.0f}만원")
+
+    disp = disp.rename(columns={
+        "customer_id": "고객ID",
+        "age": "나이",
+        "gender": "성별",
+        "income": "월소득",
+        "monthly_spending": "월지출",
+        "transaction_count": "거래횟수",
+        "days_since_last_transaction": "마지막거래(일전)",
+        "savings_rate": "저축률",
+        "loan_balance": "대출잔액",
+        "credit_score": "신용점수",
+        "num_accounts": "보유계좌수",
+        "segment": "세그먼트",
+        "주거래은행": "주거래은행",
+        "여신잔액_만원": "여신잔액",
+        "수신잔액_만원": "수신잔액",
+        "카드실적_만원": "카드실적",
+        "외환거래_달러": "외환거래",
+        "펀드잔액_만원": "펀드잔액",
+    })
 
     st.markdown(f"**{len(disp):,}명** 표시 중")
     st.dataframe(disp, use_container_width=True, hide_index=True)
@@ -378,6 +579,10 @@ def tab_insights(df: pd.DataFrame) -> None:
             ("평균 거래횟수", f"{analysis['transaction_count'].mean():.1f}회/월"),
             ("마지막 거래 경과", f"{analysis['days_since_last_transaction'].mean():.1f}일 전"),
             ("고액 대출자 비율", f"{high_loan_cnt}/{len(analysis)}명 ({high_loan_cnt/len(analysis):.1%})"),
+            ("평균 여신잔액", f"{analysis['여신잔액_만원'].mean():.0f}만원"),
+            ("평균 수신잔액", f"{analysis['수신잔액_만원'].mean():.0f}만원"),
+            ("평균 카드실적", f"{analysis['카드실적_만원'].mean():.0f}만원"),
+            ("평균 펀드잔액", f"{analysis['펀드잔액_만원'].mean():.0f}만원"),
         ]
         st.dataframe(
             pd.DataFrame(rows, columns=["지표", "값"]),
@@ -432,6 +637,149 @@ def tab_insights(df: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig2, use_container_width=True)
 
+    # ── 은행별 경쟁력 분석 ──────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("🏦 은행별 경쟁력 분석")
+
+    bank_comp = (
+        df.groupby("주거래은행")
+        .agg(
+            고객수=("customer_id", "count"),
+            평균여신=("여신잔액_만원", "mean"),
+            평균수신=("수신잔액_만원", "mean"),
+            평균카드=("카드실적_만원", "mean"),
+            평균외환=("외환거래_달러", "mean"),
+            평균펀드=("펀드잔액_만원", "mean"),
+            평균신용점수=("credit_score", "mean"),
+            평균저축률=("savings_rate", "mean"),
+        )
+        .reset_index()
+    )
+
+    col_bc1, col_bc2 = st.columns(2)
+
+    with col_bc1:
+        # 은행별 종합 수익성 지표 (여신+카드실적 합산)
+        bank_comp["수익성지표"] = bank_comp["평균여신"] * 0.04 + bank_comp["평균카드"] * 0.01
+        fig_profit = px.bar(
+            bank_comp.sort_values("수익성지표", ascending=False),
+            x="주거래은행",
+            y="수익성지표",
+            color="주거래은행",
+            color_discrete_map=BANK_COLORS,
+            title="은행별 추정 수익성 지표 (여신×4%+카드×1%)",
+            text_auto=".1f",
+        )
+        fig_profit.update_layout(showlegend=False)
+        st.plotly_chart(fig_profit, use_container_width=True)
+
+    with col_bc2:
+        # 은행별 평균 외환거래 (글로벌 역량)
+        fig_fx = px.bar(
+            bank_comp.sort_values("평균외환", ascending=False),
+            x="주거래은행",
+            y="평균외환",
+            color="주거래은행",
+            color_discrete_map=BANK_COLORS,
+            title="은행별 평균 외환거래액 (달러)",
+            text_auto=".0f",
+        )
+        fig_fx.update_layout(showlegend=False)
+        st.plotly_chart(fig_fx, use_container_width=True)
+
+    # 은행별 종합 경쟁력 테이블
+    st.markdown("**은행별 종합 경쟁력 현황**")
+    comp_display = bank_comp.copy()
+    comp_display["평균여신"] = comp_display["평균여신"].apply(lambda x: f"{x:.0f}만원")
+    comp_display["평균수신"] = comp_display["평균수신"].apply(lambda x: f"{x:.0f}만원")
+    comp_display["평균카드"] = comp_display["평균카드"].apply(lambda x: f"{x:.0f}만원")
+    comp_display["평균외환"] = comp_display["평균외환"].apply(lambda x: f"${x:.0f}")
+    comp_display["평균펀드"] = comp_display["평균펀드"].apply(lambda x: f"{x:.0f}만원")
+    comp_display["평균신용점수"] = comp_display["평균신용점수"].apply(lambda x: f"{x:.0f}점")
+    comp_display["평균저축률"] = comp_display["평균저축률"].apply(lambda x: f"{x:.1%}")
+    comp_display = comp_display.drop(columns=["수익성지표"]).rename(columns={"주거래은행": "은행"})
+    st.dataframe(comp_display, use_container_width=True, hide_index=True)
+
+    # ── 이탈 위험 고객 분석 ──────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("🚨 이탈 위험 고객 분석")
+
+    # 이탈 위험 점수 계산 (거래 경과일 + 낮은 신용점수 + 비활성 세그먼트)
+    churn_df = df.copy()
+    churn_df["이탈위험점수"] = (
+        (churn_df["days_since_last_transaction"] > 30).astype(int) * 30
+        + (churn_df["credit_score"] < 650).astype(int) * 25
+        + (churn_df["segment"] == "비활성").astype(int) * 30
+        + (churn_df["transaction_count"] < 5).astype(int) * 15
+    )
+    churn_high = churn_df[churn_df["이탈위험점수"] >= 55]
+
+    col_ch1, col_ch2, col_ch3 = st.columns(3)
+    col_ch1.metric("이탈 고위험 고객", f"{len(churn_high)}명", f"전체의 {len(churn_high)/len(df)*100:.1f}%")
+    col_ch2.metric("평균 이탈위험점수", f"{churn_df['이탈위험점수'].mean():.1f}점", "55점 이상 = 고위험")
+    col_ch3.metric(
+        "고위험 고객 평균 대출",
+        f"{churn_high['여신잔액_만원'].mean():.0f}만원" if len(churn_high) > 0 else "N/A",
+        "회수 위험 모니터링 필요",
+    )
+
+    col_churn1, col_churn2 = st.columns(2)
+
+    with col_churn1:
+        # 은행별 이탈 위험 고객 비율
+        bank_churn = (
+            churn_df.groupby("주거래은행")
+            .apply(lambda x: pd.Series({
+                "전체": len(x),
+                "고위험": (x["이탈위험점수"] >= 55).sum(),
+            }))
+            .reset_index()
+        )
+        bank_churn["이탈위험비율"] = bank_churn["고위험"] / bank_churn["전체"] * 100
+        fig_churn = px.bar(
+            bank_churn.sort_values("이탈위험비율", ascending=False),
+            x="주거래은행",
+            y="이탈위험비율",
+            color="주거래은행",
+            color_discrete_map=BANK_COLORS,
+            title="은행별 이탈 위험 고객 비율 (%)",
+            text_auto=".1f",
+        )
+        fig_churn.update_layout(showlegend=False, yaxis_title="이탈 위험 비율 (%)")
+        st.plotly_chart(fig_churn, use_container_width=True)
+
+    with col_churn2:
+        # 이탈위험점수 분포
+        fig_score = px.histogram(
+            churn_df,
+            x="이탈위험점수",
+            color="주거래은행",
+            color_discrete_map=BANK_COLORS,
+            nbins=15,
+            title="은행별 이탈위험점수 분포",
+            labels={"이탈위험점수": "이탈위험점수", "count": "고객 수"},
+            barmode="overlay",
+            opacity=0.7,
+        )
+        fig_score.add_vline(x=55, line_dash="dash", line_color="red", annotation_text="고위험 기준선(55)")
+        st.plotly_chart(fig_score, use_container_width=True)
+
+    # 고위험 고객 목록
+    if len(churn_high) > 0:
+        st.markdown("**이탈 고위험 고객 상세 목록**")
+        churn_display = churn_high[
+            ["customer_id", "segment", "주거래은행", "이탈위험점수",
+             "days_since_last_transaction", "credit_score", "여신잔액_만원", "수신잔액_만원"]
+        ].sort_values("이탈위험점수", ascending=False).rename(columns={
+            "customer_id": "고객ID",
+            "segment": "세그먼트",
+            "days_since_last_transaction": "마지막거래(일전)",
+            "credit_score": "신용점수",
+            "여신잔액_만원": "여신잔액(만원)",
+            "수신잔액_만원": "수신잔액(만원)",
+        })
+        st.dataframe(churn_display, use_container_width=True, hide_index=True)
+
 
 # ── 메인 ──────────────────────────────────────────────────────────────────────
 def main() -> None:
@@ -439,7 +787,7 @@ def main() -> None:
     filtered = build_sidebar(df_full)
 
     st.title("🏦 마이데이터 AI 분석 대시보드")
-    st.caption("80명의 더미 고객 데이터 기반 — VIP · 일반 · 절약형 · 비활성 4개 세그먼트 분석")
+    st.caption("80명의 더미 고객 데이터 기반 — VIP · 일반 · 절약형 · 비활성 4개 세그먼트 · 5개 주거래은행 분석")
     st.markdown("---")
 
     if filtered.empty:

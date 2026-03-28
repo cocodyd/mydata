@@ -5,7 +5,12 @@
       "Bash(python3:*)",
       "Bash(where python:*)",
       "Bash(C:/Users/cocod/anaconda3/python.exe -c \"import pandas as pd; df = pd.read_csv\\('C:/Users/cocod/OneDrive/바탕 화면/CODEX_TEST/data/dummy_data.csv'\\); print\\(df.shape\\); print\\(df['segment'].value_counts\\(\\)\\)\")",
-      "Bash(C:/Users/cocod/anaconda3/python.exe -c \"import streamlit, plotly; print\\('streamlit:', streamlit.__version__\\); print\\('plotly:', plotly.__version__\\)\")"
+      "Bash(C:/Users/cocod/anaconda3/python.exe -c \"import streamlit, plotly; print\\('streamlit:', streamlit.__version__\\); print\\('plotly:', plotly.__version__\\)\")",
+      "Bash(find 'C:\\\\Users\\\\cocod\\\\OneDrive\\\\바탕 화면\\\\CODEX_TEST' -type f -name *.py -o -name *.txt -o -name *.md -o -name *.csv -o -name *.json -o -name *.yml -o -name *.yaml -o -name *.ini -o -name *.cfg)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\(''data/dummy_data.csv''\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.shape\\); print\\(df[''주거래은행''].value_counts\\(\\)\\)\")",
+      "Bash(python.exe -c \"import pandas as pd; df = pd.read_csv\\(''data/dummy_data.csv''\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.shape\\)\")",
+      "Bash(python.exe -c \":*)",
+      "Bash(python.exe -m py_compile app.py)"
     ]
   }
 }
